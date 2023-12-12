@@ -5,4 +5,8 @@
 .idea
 __pycache__/
 *.xlsx
-*.py
+data.py
+index.py
+main.py
+ui.py
+utils.py
