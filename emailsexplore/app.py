@@ -403,6 +403,19 @@ class EmailsExplore(Frame):
         # self.help_menu = self.createPulldown(self.menu, self.help_menu)
         # self.menu.add_cascade(label='Help', menu=self.help_menu['var'])
 
+        # if hasattr(self, 'all_emails'):
+        #     # Generate top-level organizational units
+        #     org_unit_paths = set(x.split('/')[1] for x in self.all_emails['Org Unit Path [Required]'].unique().tolist())
+        #     for unit in org_unit_paths:
+        #         submenu_structure = self.create_sub_menu(unit)
+        #         for label, submenu in submenu_structure.items():
+        #             if 'submenu' in submenu:  # If the item has nested sub-menus
+        #                 new_menu = Menu(self.menu, tearoff=0)
+        #                 self.populate_menu(new_menu, submenu['submenu'])
+        #                 self.menu.add_cascade(label=label, menu=new_menu)
+        #             else:  # Directly add command if no further nesting
+        #                 self.menu.add_command(label=label, command=submenu['cmd'])
+
         if hasattr(self, 'all_emails'):
             org_unit_paths = list(
                 set(x.split('/')[1] for x in self.all_emails['Org Unit Path [Required]'].unique().tolist()))
@@ -418,14 +431,80 @@ class EmailsExplore(Frame):
                 # self.menu.add_cascade(label=unit, menu=self[f"tmp{count}_menu"]['var'])
 
 
-            self.pidrozdily_menu = self.createMenuPidrozdily()
-            self.pidrozdily_menu = self.createPulldown(self.menu, self.pidrozdily_menu)
-            self.menu.add_cascade(label='Підрозділи', menu=self.pidrozdily_menu['var'])
+            # self.pidrozdily_menu = self.createMenuPidrozdily()
+            # self.pidrozdily_menu = self.createPulldown(self.menu, self.pidrozdily_menu)
+            # self.menu.add_cascade(label='Підрозділи', menu=self.pidrozdily_menu['var'])
 
 
 
         self.main.config(menu=self.menu)
         return
+
+    def populate_menu(self, menu, submenu_structure):
+        """
+        Populates a given menu with items from submenu_structure recursively.
+        :param menu: Tkinter Menu object to populate.
+        :param submenu_structure: Dictionary representing the submenu structure.
+        """
+        for label, item in submenu_structure.items():
+            if 'submenu' in item:  # Nested submenus
+                new_menu = Menu(menu, tearoff=0)
+                self.populate_menu(new_menu, item['submenu'])
+                menu.add_cascade(label=label, menu=new_menu)
+            else:
+                menu.add_command(label=label, command=item['cmd'])
+    def create_sub_menu(self, path, label_prefix=''):
+        """
+        Recursively creates sub-menus for each organizational unit based on its depth in the hierarchy.
+        :param path: The initial or current organizational path to create menu items for.
+        :param label_prefix: Prefix for menu item labels to maintain ordering.
+        :return: A dictionary representing the menu structure.
+        """
+        # Base case: if the path is empty, return a menu item for the root
+        if not path:
+            return {'01Root': {'cmd': lambda unit_path=path: self.action_menu_pidrozdil(unit_path=unit_path)}}
+
+        paths = self.all_emails[self.all_emails['Org Unit Path [Required]'].str.startswith(f"/{path}/")][
+            'Org Unit Path [Required]'].unique()
+        menu_structure = {}
+        seen = set()
+        count = 0
+
+        for full_path in paths:
+            segments = full_path.split('/')
+            # Check if we are dealing with a direct child of the current path
+            if len(segments) > 2 and segments[2] not in seen:
+                seen.add(segments[2])
+                count += 1
+                keycount = f"{label_prefix}{count:02d}"  # Ensures proper ordering
+                submenu_label = segments[2]
+
+                # Check if this path has further sub-paths
+                deeper_paths = [p for p in paths if p.startswith(f"{path}/{submenu_label}/")]
+                if any(deeper_paths):
+                    # Recursive case: This path has deeper levels, create a nested sub-menu
+                    submenu_structure = self.create_sub_menu(f"{path}/{submenu_label}", label_prefix=keycount)
+                    menu_structure[f"{keycount}{submenu_label}"] = {'submenu': submenu_structure}
+                else:
+                    # Base case: This path does not have deeper levels, create a command
+                    menu_structure[f"{keycount}{submenu_label}"] = {
+                        'cmd': lambda unit_path=f"{path}/{submenu_label}": self.action_menu_pidrozdil(
+                            unit_path=unit_path)}
+
+        if not menu_structure:
+            # If no sub-paths were found, create a default menu item for the current path
+            menu_structure = {f'01{path.split("/")[-1]}': {
+                'cmd': lambda unit_path=path: self.action_menu_pidrozdil(unit_path=unit_path)}}
+
+        return menu_structure
+
+    def action_menu_pidrozdil(self, unit_path):
+        """
+        Action to perform when a menu item representing an organizational unit is selected.
+        :param unit_path: The organizational path selected from the menu.
+        """
+        # Implement the action to take when a menu item is selected
+        pass
 
     def createSubMenu(self, unit):
         # print('unit', unit)
@@ -441,13 +520,14 @@ class EmailsExplore(Frame):
             'Org Unit Path [Required]'].unique()
         sub_unit_paths = []
         seen = set()
+
         for path in paths:
             segments = path.split('/')
             # Ensure we're only adding the direct sub-unit under the current unit, not deeper levels
             if len(segments) > 2 and segments[2] not in seen:
                 sub_unit_paths.append(segments[2])
                 seen.add(segments[2])
-
+        print(sub_unit_paths)
         if len(sub_unit_paths) == 0:
             return {f'01{unit}':{'cmd': lambda unit_path=unit: self.actionMenuPidrozdil(unit_path=unit_path)}}
 
@@ -456,6 +536,19 @@ class EmailsExplore(Frame):
         # print(sub_unit_paths)
         for subunit in sub_unit_paths:
             count += 1
+            sub_paths = self.all_emails[self.all_emails['Org Unit Path [Required]'].str.startswith(f"/{unit}/{subunit}")][
+            'Org Unit Path [Required]'].unique()
+            sub_sub_unit_paths=[]
+            sub_seen = set()
+            for path in sub_paths:
+                segments = path.split('/')
+                # Ensure we're only adding the direct sub-unit under the current unit, not deeper levels
+                if len(segments) > 3 and segments[3] not in seen:
+                    sub_sub_unit_paths.append(segments[3])
+                    sub_seen.add(segments[3])
+
+
+            print('====',subunit,sub_sub_unit_paths)
             keycount = f"0{count}" if count < 10 else f"{count}"
             keyMenu = f"{keycount}{subunit}"
             rez[keyMenu] = {'cmd': lambda unit_path=f"{unit}/{subunit}": self.actionMenuPidrozdil(unit_path=unit_path)}
@@ -674,31 +767,32 @@ class EmailsExplore(Frame):
 
         filtered_emails = self.all_emails[self.all_emails["Org Unit Path [Required]"].str.contains('/СПІВРОБІТНИКИ')]
         filtered_org_paths = filtered_emails['Org Unit Path [Required]'].unique()
-        not_in_emails['Email Address [Required]'] = not_in_emails.apply(
-            lambda
-                row: staffEmailMaker(row),
-            axis=1
-        )
+        if not not_in_emails.empty:
+            not_in_emails['Email Address [Required]'] = not_in_emails.apply(
+                lambda
+                    row: staffEmailMaker(row),
+                axis=1
+            )
 
-        def find_matching_path(org_paths, department):
-            if (" класи " in department) or ("лабораторія" in department) or ('клініка' in department) or ('обсерваторія' in department):
-                if department in labsToPath.keys():
-                    return labsToPath[department]
-                return "TODO Лабораторія"
-            if 'деканат ' in department:
-                if department in kafedraToPath.keys():
-                    return kafedraToPath[department]
-                return "TODO Деканат"
-            for path in org_paths:
-                if department.lower().strip() in path.lower():
-                    return path
+            def find_matching_path(org_paths, department):
+                if (" класи " in department) or ("лабораторія" in department) or ('клініка' in department) or ('обсерваторія' in department):
+                    if department in labsToPath.keys():
+                        return labsToPath[department]
+                    return "TODO Лабораторія"
+                if 'деканат ' in department:
+                    if department in kafedraToPath.keys():
+                        return kafedraToPath[department]
+                    return "TODO Деканат"
+                for path in org_paths:
+                    if department.lower().strip() in path.lower():
+                        return path
 
-            return "TODO"
-        not_in_emails['Org Unit Path [Required]'] = not_in_emails.apply(
-            lambda row: find_matching_path(filtered_org_paths, row['department']),
-            axis=1
-        )
-        not_in_emails['Employee Title'] = not_in_emails.apply(lambda row: posadyConvert[row['posada']], axis=1)
+                return "TODO"
+            not_in_emails['Org Unit Path [Required]'] = not_in_emails.apply(
+                lambda row: find_matching_path(filtered_org_paths, row['department']),
+                axis=1
+            )
+            not_in_emails['Employee Title'] = not_in_emails.apply(lambda row: posadyConvert[row['posada']], axis=1)
 
         self.addSheet('мають корпоративки', df=staff_emails_in, select=True)
         self.addSheet('не мають корпоративок', df=not_in_emails, select=True)
@@ -998,12 +1092,22 @@ class EmailsExplore(Frame):
 
             self.all_emails = pd.json_normalize(jsondata['users'])
             self.addSheet('all_emails', df=self.all_emails, select=True)
+            self.testValid()
             self.createMenuBar()
 
         self.filename = None
         self.projopen = True
         self.main.title('EmailsExplore')
         return
+
+    def testValid(self):
+        tmp = self.all_emails.copy()
+        tmp['test'] = tmp['First Name [Required]'].replace('  ', ' ', regex=True)
+        result = tmp[tmp['test'] != tmp['First Name [Required]']]
+        if not result.empty:
+            self.addSheet('FIRST NAME', df=result, select=True)
+        return
+
 
     def loadProject(self, filename=None, asksave=False):
         pass
